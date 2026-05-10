@@ -17,20 +17,19 @@ const fetchProfile = async (userId: string): Promise<Profile | null> => {
     .from('profiles')
     .select('*')
     .eq('id', userId)
-    .single()
+    .maybeSingle()
   return data ?? null
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  loading: true, // start as true until initialize() completes
+  loading: true,
 
   setUser: (user) => set({ user }),
 
   initialize: async () => {
     set({ loading: true })
 
-    // Check for existing session on page load
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.user) {
       const profile = await fetchProfile(session.user.id)
@@ -39,13 +38,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: null, loading: false })
     }
 
-    // Listen for login/logout events
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    // Fires when user clicks confirmation link in email → establishes session
+    supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         const profile = await fetchProfile(session.user.id)
-        set({ user: profile })
+        set({ user: profile, loading: false })
       } else {
-        set({ user: null })
+        set({ user: null, loading: false })
       }
     })
   },
@@ -55,6 +54,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
       set({ loading: false })
+      if (error.message.toLowerCase().includes('email not confirmed')) {
+        return 'Please verify your email first — check your inbox (and spam folder).'
+      }
+      if (error.message.toLowerCase().includes('invalid login')) {
+        return 'Wrong email or password.'
+      }
       return error.message
     }
     if (data.user) {
@@ -67,16 +72,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   signUp: async (email, password, username, fullName) => {
     set({ loading: true })
 
-    // Check username is not taken
+    // Check username uniqueness
     const { data: existing } = await supabase
       .from('profiles')
       .select('id')
       .eq('username', username)
-      .single()
+      .maybeSingle()
 
     if (existing) {
       set({ loading: false })
-      return 'Username is already taken'
+      return 'Username already taken — try a different one.'
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -84,6 +89,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       password,
       options: {
         data: { username, full_name: fullName },
+        // This tells Supabase where to redirect after email confirmation
+        // Must match a URL in your Supabase → Auth → URL Configuration → Redirect URLs
+        emailRedirectTo: window.location.origin,
       },
     })
 
@@ -92,21 +100,22 @@ export const useAuthStore = create<AuthState>((set) => ({
       return error.message
     }
 
-    if (data.user) {
-      // Wait briefly for the DB trigger to create the profile
-      await new Promise((r) => setTimeout(r, 800))
-      const profile = await fetchProfile(data.user.id)
-      set({ user: profile, loading: false })
-    } else {
+    if (!data.session) {
+      // Email confirmation is ON — user must verify before logging in
       set({ loading: false })
-      return 'Check your email to confirm your account'
+      return 'CHECK_EMAIL'
     }
 
+    // Email confirmation is OFF — log them in directly
+    await new Promise((r) => setTimeout(r, 800))
+    const profile = await fetchProfile(data.user!.id)
+    set({ user: profile, loading: false })
     return null
   },
 
   signOut: async () => {
     await supabase.auth.signOut()
+    sessionStorage.removeItem('sm_verify')
     set({ user: null })
   },
 }))

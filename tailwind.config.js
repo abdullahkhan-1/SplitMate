@@ -4,42 +4,54 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['DM Sans', 'sans-serif'],
-        display: ['Syne', 'sans-serif'],
-        mono: ['DM Mono', 'monospace'],
+        sans: ['Inter', 'sans-serif'],
+        display: ['Inter', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
-        ink: {
-          DEFAULT: '#0A0A0A',
-          50: '#F5F4EF',
-          100: '#E8E7E2',
-          200: '#C8C7C0',
-          400: '#898880',
-          600: '#504F49',
-          800: '#1E1E1A',
-          900: '#0A0A0A',
-        },
+        // Page & surface backgrounds
+        base:    '#0A0A0A',
+        surface: '#141414',
+        raised:  '#1C1C1C',
+        overlay: '#242424',
+
+        // Borders
+        line:  '#262626',
+        'line-strong': '#404040',
+
+        // Text
+        'text-1': '#FAFAFA',
+        'text-2': '#A1A1A1',
+        'text-3': '#525252',
+
+        // Brand green
         brand: {
-          DEFAULT: '#16A34A',
-          light: '#DCFCE7',
-          dark: '#14532D',
+          DEFAULT: '#22C55E',
+          dim:  '#22C55E1A',
+          text: '#86EFAC',
+          strong: '#16A34A',
         },
+
+        // Danger red
         danger: {
-          DEFAULT: '#EF4444',
-          light: '#FEE2E2',
+          DEFAULT: '#F87171',
+          dim:  '#F871711A',
+          text: '#FCA5A5',
         },
+
+        // Warning amber
         warn: {
-          DEFAULT: '#F59E0B',
-          light: '#FEF3C7',
+          DEFAULT: '#FBBF24',
+          dim:  '#FBBF241A',
+          text: '#FDE68A',
         },
+
+        // Info blue
         info: {
-          DEFAULT: '#3B82F6',
-          light: '#EFF6FF',
+          DEFAULT: '#60A5FA',
+          dim:  '#60A5FA1A',
+          text: '#BAE6FD',
         },
-      },
-      borderRadius: {
-        xl: '12px',
-        '2xl': '16px',
       },
     },
   },

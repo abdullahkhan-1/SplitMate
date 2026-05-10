@@ -14,9 +14,15 @@ import {
 
 const CATEGORIES = Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label }))
 
+// Must exactly match the schema CHECK constraint — no 'study'
 const EMOJI: Record<ExpenseCategory, string> = {
-  food: '🍔', groceries: '🛒', transport: '🚕', medicine: '💊',
-  utilities: '🔌', entertainment: '🎮', study: '📚', other: '💳',
+  food: '🍔',
+  groceries: '🛒',
+  transport: '🚕',
+  medicine: '💊',
+  utilities: '🔌',
+  entertainment: '🎮',
+  other: '💳',
 }
 
 export const ExpensesPage = () => {
@@ -28,14 +34,13 @@ export const ExpensesPage = () => {
   const [error, setError] = useState('')
   const [filterCat, setFilterCat] = useState<string>('all')
 
+  // Uses NewExpenseForm field names exactly as defined in types/index.ts
   const emptyForm = (): NewExpenseForm => ({
-    description: '',
-    total_amount: 0,
+    title: '',
+    amount: 0,
     category: 'other',
-    expense_date: new Date().toISOString().split('T')[0],
-    note: '',
-    is_split: false,
-    split_mode: 'equal',
+    notes: '',
+    split_type: 'solo',
     splits: [],
   })
 
@@ -49,29 +54,34 @@ export const ExpensesPage = () => {
     fetchFriends(user.id)
   }, [user?.id])
 
-  // Recalculate splits when friends or total changes
+  // Recalculate splits when friends, amount, or split_type changes
   useEffect(() => {
-    if (!form.is_split || selectedFriendIds.length === 0) {
+    const isSplit = form.split_type !== 'solo'
+    if (!isSplit || selectedFriendIds.length === 0) {
       setForm((f) => ({ ...f, splits: [] }))
       return
     }
-    const participants = [user!.id, ...selectedFriendIds]
-    if (form.split_mode === 'equal') {
-      const each = form.total_amount / participants.length
-      setForm((f) => ({
-        ...f,
-        splits: selectedFriendIds.map((id) => ({ user_id: id, amount: parseFloat(each.toFixed(2)) })),
-      }))
-    } else {
+    const totalParticipants = selectedFriendIds.length + 1 // friends + paying user
+    if (form.split_type === 'equal') {
+      const each = form.amount / totalParticipants
       setForm((f) => ({
         ...f,
         splits: selectedFriendIds.map((id) => ({
           user_id: id,
-          amount: parseFloat(manualAmounts[id] || '0'),
+          amount_owed: parseFloat(each.toFixed(2)),
+        })),
+      }))
+    } else {
+      // custom — use manually entered amounts
+      setForm((f) => ({
+        ...f,
+        splits: selectedFriendIds.map((id) => ({
+          user_id: id,
+          amount_owed: parseFloat(manualAmounts[id] || '0'),
         })),
       }))
     }
-  }, [form.is_split, form.total_amount, form.split_mode, selectedFriendIds, manualAmounts])
+  }, [form.split_type, form.amount, selectedFriendIds, manualAmounts])
 
   const toggleFriend = (id: string) => {
     setSelectedFriendIds((prev) =>
@@ -80,9 +90,9 @@ export const ExpensesPage = () => {
   }
 
   const handleSubmit = async () => {
-    if (!form.description.trim()) { setError('Add a description'); return }
-    if (!form.total_amount || form.total_amount <= 0) { setError('Enter a valid amount'); return }
-    if (form.is_split && selectedFriendIds.length === 0) {
+    if (!form.title.trim()) { setError('Add a title/description'); return }
+    if (!form.amount || form.amount <= 0) { setError('Enter a valid amount'); return }
+    if (form.split_type !== 'solo' && selectedFriendIds.length === 0) {
       setError('Select at least one friend to split with')
       return
     }
@@ -99,7 +109,7 @@ export const ExpensesPage = () => {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this expense?')) return
-    await deleteExpense(id)
+    await deleteExpense(id, user!.id) // deleteExpense requires (expenseId, userId)
     fetchExpenses(user!.id)
   }
 
@@ -168,14 +178,14 @@ export const ExpensesPage = () => {
                 <div className="flex items-center gap-3">
                   <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                    style={{ background: CATEGORY_COLORS[exp.category] + '18' }}
+                    style={{ background: (CATEGORY_COLORS[exp.category] ?? '#6B7280') + '18' }}
                   >
-                    {EMOJI[exp.category]}
+                    {EMOJI[exp.category] ?? '💳'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-ink-900 truncate">{exp.description}</p>
-                      {exp.is_split && (
+                      <p className="text-sm font-semibold text-ink-900 truncate">{exp.title}</p>
+                      {exp.split_type !== 'solo' && (
                         <Badge variant="info">
                           <Users size={10} />
                           Split
@@ -186,11 +196,13 @@ export const ExpensesPage = () => {
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-xs text-ink-400">{format(new Date(exp.expense_date), 'd MMM yyyy')}</p>
+                      <p className="text-xs text-ink-400">
+                        {format(new Date(exp.created_at), 'd MMM yyyy')}
+                      </p>
                       <span className="text-ink-200">·</span>
                       <p className="text-xs text-ink-400">{CATEGORY_LABELS[exp.category]}</p>
                     </div>
-                    {exp.is_split && exp.splits && exp.splits.length > 0 && (
+                    {exp.split_type !== 'solo' && exp.splits && exp.splits.length > 0 && (
                       <div className="flex items-center gap-1 mt-1">
                         {exp.splits.slice(0, 4).map((s) => (
                           <Avatar key={s.id} name={s.user?.full_name || '?'} size="sm" />
@@ -202,10 +214,10 @@ export const ExpensesPage = () => {
                     )}
                   </div>
                   <div className="text-right flex flex-col items-end gap-1">
-                    <Amount value={exp.total_amount} size="md" />
+                    <Amount value={exp.amount} size="md" />
                     {myShare && (
                       <p className="text-xs text-ink-400">
-                        Your share: Rs {myShare.amount.toLocaleString()}
+                        Your share: Rs {Number(myShare.amount_owed).toLocaleString()}
                       </p>
                     )}
                     {isMyExpense && (
@@ -230,8 +242,8 @@ export const ExpensesPage = () => {
           <Input
             label="What was it for?"
             placeholder="Dinner at McDonald's, groceries…"
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             autoFocus
           />
 
@@ -241,8 +253,8 @@ export const ExpensesPage = () => {
               type="number"
               placeholder="0"
               prefix="Rs"
-              value={form.total_amount || ''}
-              onChange={(e) => setForm((f) => ({ ...f, total_amount: parseFloat(e.target.value) || 0 }))}
+              value={form.amount || ''}
+              onChange={(e) => setForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
             />
             <Select
               label="Category"
@@ -252,27 +264,27 @@ export const ExpensesPage = () => {
             />
           </div>
 
-          <Input
-            label="Date"
-            type="date"
-            value={form.expense_date}
-            onChange={(e) => setForm((f) => ({ ...f, expense_date: e.target.value }))}
-          />
-
-          {/* Solo vs Split toggle */}
+          {/* Solo vs Split toggle — drives split_type field */}
           <div className="flex gap-2">
             <button
-              onClick={() => setForm((f) => ({ ...f, is_split: false }))}
+              onClick={() => {
+                setForm((f) => ({ ...f, split_type: 'solo', splits: [] }))
+                setSelectedFriendIds([])
+              }}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border transition-all ${
-                !form.is_split ? 'bg-ink-900 text-white border-ink-900' : 'border-ink-100 text-ink-600 hover:border-ink-200'
+                form.split_type === 'solo'
+                  ? 'bg-ink-900 text-white border-ink-900'
+                  : 'border-ink-100 text-ink-600 hover:border-ink-200'
               }`}
             >
               <User size={15} /> Solo expense
             </button>
             <button
-              onClick={() => setForm((f) => ({ ...f, is_split: true }))}
+              onClick={() => setForm((f) => ({ ...f, split_type: 'equal' }))}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border transition-all ${
-                form.is_split ? 'bg-ink-900 text-white border-ink-900' : 'border-ink-100 text-ink-600 hover:border-ink-200'
+                form.split_type !== 'solo'
+                  ? 'bg-ink-900 text-white border-ink-900'
+                  : 'border-ink-100 text-ink-600 hover:border-ink-200'
               }`}
             >
               <Users size={15} /> Split with friends
@@ -280,7 +292,7 @@ export const ExpensesPage = () => {
           </div>
 
           {/* Split section */}
-          {form.is_split && (
+          {form.split_type !== 'solo' && (
             <div className="bg-ink-50 rounded-xl p-4 flex flex-col gap-3">
               <p className="text-sm font-medium text-ink-800">Who's splitting with you?</p>
               {friends.length === 0 ? (
@@ -305,7 +317,7 @@ export const ExpensesPage = () => {
                       </button>
                       <Avatar name={f.full_name} size="sm" />
                       <span className="text-sm text-ink-800 flex-1">{f.full_name}</span>
-                      {selectedFriendIds.includes(f.id) && form.split_mode === 'manual' && (
+                      {selectedFriendIds.includes(f.id) && form.split_type === 'custom' && (
                         <input
                           type="number"
                           className="w-24 px-2 py-1 text-sm border border-ink-200 rounded-lg text-right font-mono"
@@ -314,9 +326,9 @@ export const ExpensesPage = () => {
                           onChange={(e) => setManualAmounts((m) => ({ ...m, [f.id]: e.target.value }))}
                         />
                       )}
-                      {selectedFriendIds.includes(f.id) && form.split_mode === 'equal' && form.total_amount > 0 && (
+                      {selectedFriendIds.includes(f.id) && form.split_type === 'equal' && form.amount > 0 && (
                         <span className="text-sm font-mono text-ink-500">
-                          Rs {(form.total_amount / (selectedFriendIds.length + 1)).toFixed(0)}
+                          Rs {(form.amount / (selectedFriendIds.length + 1)).toFixed(0)}
                         </span>
                       )}
                     </div>
@@ -327,33 +339,34 @@ export const ExpensesPage = () => {
               {selectedFriendIds.length > 0 && (
                 <div className="flex gap-2 pt-1 border-t border-ink-100">
                   <button
-                    onClick={() => setForm((f) => ({ ...f, split_mode: 'equal' }))}
+                    onClick={() => setForm((f) => ({ ...f, split_type: 'equal' }))}
                     className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                      form.split_mode === 'equal' ? 'bg-ink-900 text-white' : 'bg-white text-ink-600 border border-ink-200'
+                      form.split_type === 'equal' ? 'bg-ink-900 text-white' : 'bg-white text-ink-600 border border-ink-200'
                     }`}
                   >
                     Equal split
                   </button>
                   <button
-                    onClick={() => setForm((f) => ({ ...f, split_mode: 'manual' }))}
+                    onClick={() => setForm((f) => ({ ...f, split_type: 'custom' }))}
                     className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                      form.split_mode === 'manual' ? 'bg-ink-900 text-white' : 'bg-white text-ink-600 border border-ink-200'
+                      form.split_type === 'custom' ? 'bg-ink-900 text-white' : 'bg-white text-ink-600 border border-ink-200'
                     }`}
                   >
-                    Manual amounts
+                    Custom amounts
                   </button>
                 </div>
               )}
 
-              {selectedFriendIds.length > 0 && form.total_amount > 0 && (
+              {selectedFriendIds.length > 0 && form.amount > 0 && (
                 <div className="bg-white rounded-lg p-3 text-sm text-ink-600">
                   <p>
-                    You pay: <span className="font-mono font-semibold text-ink-900">
-                      Rs {(form.total_amount - form.splits.reduce((s, sp) => s + sp.amount, 0)).toFixed(0)}
+                    You pay:{' '}
+                    <span className="font-mono font-semibold text-ink-900">
+                      Rs {(form.amount - form.splits.reduce((s, sp) => s + sp.amount_owed, 0)).toFixed(0)}
                     </span>
                   </p>
                   <p className="text-xs text-ink-400 mt-0.5">
-                    Others will owe you their share from the total Rs {form.total_amount.toLocaleString()}
+                    Others will owe you their share from total Rs {form.amount.toLocaleString()}
                   </p>
                 </div>
               )}
@@ -363,8 +376,8 @@ export const ExpensesPage = () => {
           <Input
             label="Note (optional)"
             placeholder="Any details…"
-            value={form.note}
-            onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+            value={form.notes}
+            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
           />
 
           {error && (

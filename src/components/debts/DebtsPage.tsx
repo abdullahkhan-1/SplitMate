@@ -92,7 +92,7 @@ export const DebtsPage = () => {
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {unsettled.slice(0, 3).map((exp) => (
                           <Badge key={exp.id} variant="default">
-                            {exp.description}
+                            {exp.title}
                           </Badge>
                         ))}
                         {unsettled.length > 3 && (

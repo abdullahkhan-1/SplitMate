@@ -2,48 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  *, *::before, *::after {
-    box-sizing: border-box;
-  }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
-  html {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { -webkit-font-smoothing: antialiased; }
 
   body {
-    @apply font-sans text-ink-900 bg-ink-50;
+    background-color: #0A0A0A;
+    color: #FAFAFA;
+    font-family: 'Inter', sans-serif;
     margin: 0;
   }
 
-  h1, h2, h3, h4 {
-    @apply font-display;
+  input, select, textarea {
+    background-color: #1C1C1C !important;
+    color: #FAFAFA !important;
+    border-color: #262626 !important;
   }
 
-  /* Scrollbar */
-  ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-ink-200 rounded-full;
-  }
+  input::placeholder { color: #525252 !important; }
 
-  /* Number inputs */
   input[type=number]::-webkit-inner-spin-button,
-  input[type=number]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   input[type=number] { -moz-appearance: textfield; }
-}
 
-@layer utilities {
-  .tabular-nums {
-    font-variant-numeric: tabular-nums;
-  }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 99px; }
+
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.3; }
 }
