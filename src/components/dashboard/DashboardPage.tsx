@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { TrendingUp, TrendingDown, Wallet, ArrowRight, Clock } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuthStore } from '@/store/authStore'
 import { useAppStore } from '@/store/appStore'
 import { Card, Amount, Avatar, Badge } from '@/components/ui'
-import { CATEGORY_LABELS, CATEGORY_COLORS } from '@/types'
+import { CATEGORY_LABELS, CATEGORY_COLORS, CATEGORY_ICONS } from '@/types'
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts'
 
 const StatCard = ({
@@ -41,27 +41,31 @@ export const DashboardPage = () => {
   }, [user?.id])
 
   // Spend by category this month
-  const thisMonth = new Date()
+  const now = new Date()
   const monthExpenses = expenses.filter((e) => {
-    const d = new Date(e.expense_date)
-    return d.getMonth() === thisMonth.getMonth() && d.getFullYear() === thisMonth.getFullYear()
-      && e.paid_by === user?.id
+    const d = new Date(e.created_at)
+    return (
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear() &&
+      e.paid_by === user?.id
+    )
   })
 
   const categoryData = Object.entries(
     monthExpenses.reduce<Record<string, number>>((acc, e) => {
-      acc[e.category] = (acc[e.category] ?? 0) + Number(e.total_amount)
+      acc[e.category] = (acc[e.category] ?? 0) + Number(e.amount)
       return acc
     }, {})
   )
     .map(([category, amount]) => ({
       category,
-      name: CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS] || category,
+      name: CATEGORY_LABELS[category as ExpenseCategory] || category,
       amount,
-      color: CATEGORY_COLORS[category as keyof typeof CATEGORY_COLORS] || '#6B7280',
+      color: CATEGORY_COLORS[category as ExpenseCategory] || '#6B7280',
     }))
     .sort((a, b) => b.amount - a.amount)
 
+  type ExpenseCategory = keyof typeof CATEGORY_LABELS
   const recentExpenses = expenses.slice(0, 5)
   const topDebts = debts.slice(0, 4)
 
@@ -70,7 +74,7 @@ export const DashboardPage = () => {
       {/* Header */}
       <div className="mb-6">
         <h1 className="font-display font-bold text-2xl text-ink-900">
-          Hey, {user?.full_name.split(' ')[0]} 👋
+          Hey, {user?.full_name?.split(' ')[0] ?? 'there'} 👋
         </h1>
         <p className="text-ink-400 text-sm mt-0.5">
           {format(new Date(), 'EEEE, d MMMM yyyy')}
@@ -111,7 +115,7 @@ export const DashboardPage = () => {
         </div>
       )}
 
-      {/* Net balance highlight */}
+      {/* Net balance */}
       {walletSummary && (
         <Card className="mb-6 bg-ink-900 border-ink-900">
           <div className="flex items-center justify-between">
@@ -119,12 +123,10 @@ export const DashboardPage = () => {
               <p className="text-white/50 text-sm font-medium">Net Balance</p>
               <p className="text-xs text-white/30 mt-0.5">Available + Owed to you − You owe</p>
             </div>
-            <div className="text-right">
-              <span className={`font-mono font-bold text-3xl ${walletSummary.net_balance >= 0 ? 'text-brand' : 'text-danger'}`}>
-                {walletSummary.net_balance >= 0 ? '+' : ''}Rs{' '}
-                {Math.abs(walletSummary.net_balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
-              </span>
-            </div>
+            <span className={`font-mono font-bold text-3xl ${walletSummary.net_balance >= 0 ? 'text-brand' : 'text-danger'}`}>
+              {walletSummary.net_balance >= 0 ? '+' : ''}Rs{' '}
+              {Math.abs(walletSummary.net_balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
+            </span>
           </div>
         </Card>
       )}
@@ -187,7 +189,7 @@ export const DashboardPage = () => {
                       {debt.amount > 0 ? 'owes you' : 'you owe'}
                     </p>
                   </div>
-                  <Amount value={Math.abs(debt.amount)} size="sm" colored showSign={false} />
+                  <Amount value={Math.abs(debt.amount)} size="sm" />
                 </div>
               ))}
             </div>
@@ -210,23 +212,21 @@ export const DashboardPage = () => {
                 <div key={exp.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                   <div
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
-                    style={{ background: CATEGORY_COLORS[exp.category] + '20', color: CATEGORY_COLORS[exp.category] }}
+                    style={{
+                      background: (CATEGORY_COLORS[exp.category] ?? '#6B7280') + '20',
+                      color: CATEGORY_COLORS[exp.category] ?? '#6B7280',
+                    }}
                   >
-                    {exp.category === 'food' ? '🍔' : exp.category === 'transport' ? '🚕' : exp.category === 'groceries' ? '🛒' : exp.category === 'medicine' ? '💊' : '💳'}
+                    {CATEGORY_ICONS[exp.category] ?? '💳'}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-ink-900 truncate">{exp.description}</p>
+                    <p className="text-sm font-medium text-ink-900 truncate">{exp.title}</p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-ink-400">{format(new Date(exp.expense_date), 'd MMM')}</span>
-                      {exp.is_split && <Badge variant="info">Split</Badge>}
+                      <span className="text-xs text-ink-400">{format(new Date(exp.created_at), 'd MMM')}</span>
+                      {exp.split_type !== 'solo' && <Badge variant="info">Split</Badge>}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <Amount value={exp.total_amount} size="sm" />
-                    {exp.paid_by !== user?.id && (
-                      <p className="text-xs text-ink-400">Your share</p>
-                    )}
-                  </div>
+                  <Amount value={exp.amount} size="sm" />
                 </div>
               ))}
             </div>

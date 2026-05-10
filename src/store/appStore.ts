@@ -1,42 +1,59 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
-import type {
-  WalletTransaction, Expense, ExpenseSplit,
-  Friendship, Profile, WalletSummary, DebtEntry,
-  NewExpenseForm
-} from '@/types'
+import type { Profile, WalletSummary, DebtEntry, NewExpenseForm } from '@/types'
+
+interface WalletTransaction {
+  id: string
+  user_id: string
+  amount: number
+  type: 'received' | 'spent'
+  description: string
+  created_at: string
+}
+
+interface Expense {
+  id: string
+  paid_by: string
+  title: string
+  amount: number
+  category: string
+  split_type: 'solo' | 'equal' | 'custom'
+  notes?: string
+  created_at: string
+  payer?: Profile
+  splits?: ExpenseSplit[]
+}
+
+interface ExpenseSplit {
+  id: string
+  expense_id: string
+  user_id: string
+  amount_owed: number
+  is_settled: boolean
+  settled_at?: string
+  created_at: string
+  user?: Profile
+}
 
 interface AppState {
-  // Data
   walletTransactions: WalletTransaction[]
   expenses: Expense[]
   debts: DebtEntry[]
   friends: Profile[]
-  pendingRequests: Friendship[]
-
-  // Wallet summary (computed)
+  pendingRequests: any[]
   walletSummary: WalletSummary | null
-
-  // Loading states
   loadingWallet: boolean
   loadingExpenses: boolean
   loadingDebts: boolean
   loadingFriends: boolean
 
-  // Actions — Wallet
   fetchWallet: (userId: string) => Promise<void>
   addFunds: (userId: string, amount: number, note?: string) => Promise<string | null>
-
-  // Actions — Expenses
   fetchExpenses: (userId: string) => Promise<void>
   addExpense: (userId: string, form: NewExpenseForm) => Promise<string | null>
-  deleteExpense: (expenseId: string) => Promise<string | null>
-
-  // Actions — Debts
+  deleteExpense: (expenseId: string, userId: string) => Promise<string | null>
   fetchDebts: (userId: string) => Promise<void>
   settleDebt: (expenseId: string, debtorId: string) => Promise<string | null>
-
-  // Actions — Friends
   fetchFriends: (userId: string) => Promise<void>
   searchUsers: (query: string) => Promise<Profile[]>
   sendFriendRequest: (userId: string, friendId: string) => Promise<string | null>
@@ -55,65 +72,50 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadingDebts: false,
   loadingFriends: false,
 
-  // ——————————————————————————————————————————
-  // WALLET
-  // ——————————————————————————————————————————
+  // ─── WALLET ───────────────────────────────────────────────
   fetchWallet: async (userId) => {
     set({ loadingWallet: true })
+
+    // All received transactions
     const { data: txns } = await supabase
       .from('wallet_transactions')
       .select('*')
       .eq('user_id', userId)
-      .order('transaction_date', { ascending: false })
-
-    // Get all expenses paid by user (their share)
-    const { data: myExpenses } = await supabase
-      .from('expenses')
-      .select('total_amount, is_split, splits:expense_splits(user_id, amount, is_settled)')
-      .eq('paid_by', userId)
+      .eq('type', 'received')
+      .order('created_at', { ascending: false })
 
     const totalReceived = (txns ?? []).reduce((s, t) => s + Number(t.amount), 0)
 
-    // Total spent = solo expenses + what user paid minus what they'll get back
-    let totalSpent = 0
-    if (myExpenses) {
-      for (const exp of myExpenses) {
-        if (!exp.is_split) {
-          totalSpent += Number(exp.total_amount)
-        } else {
-          // Paid full bill, will recover from others
-          // What user personally spent = total - sum of others' shares
-          const othersOwed = (exp.splits as ExpenseSplit[])
-            .filter((s) => s.user_id !== userId && !s.is_settled)
-            .reduce((sum, s) => sum + Number(s.amount), 0)
-          const othersSettled = (exp.splits as ExpenseSplit[])
-            .filter((s) => s.user_id !== userId && s.is_settled)
-            .reduce((sum, s) => sum + Number(s.amount), 0)
-          totalSpent += Number(exp.total_amount) - othersOwed - othersSettled
-        }
-      }
-    }
+    // Solo expenses paid by user
+    const { data: soloExp } = await supabase
+      .from('expenses')
+      .select('amount')
+      .eq('paid_by', userId)
+      .eq('split_type', 'solo')
 
-    // Get what others owe user (unsettled splits from expenses user paid)
-    const { data: owedToUser } = await supabase
+    const soloSpent = (soloExp ?? []).reduce((s, e) => s + Number(e.amount), 0)
+
+    // What others owe user (unsettled splits on user's expenses)
+    const { data: owedRows } = await supabase
       .from('expense_splits')
-      .select('amount, expense:expenses!inner(paid_by)')
-      .eq('expense.paid_by', userId)
+      .select('amount_owed, expense:expenses!inner(paid_by)')
+      .eq('expense.paid_by' as any, userId)
       .eq('is_settled', false)
       .neq('user_id', userId)
 
-    const owedToUserTotal = (owedToUser ?? []).reduce((s, r) => s + Number(r.amount), 0)
+    const owedToUser = (owedRows ?? []).reduce((s, r) => s + Number(r.amount_owed), 0)
 
-    // Get what user owes others (unsettled splits where user is debtor)
-    const { data: userOwes } = await supabase
+    // What user owes others (unsettled splits where user is debtor)
+    const { data: iOweRows } = await supabase
       .from('expense_splits')
-      .select('amount, expense:expenses!inner(paid_by)')
+      .select('amount_owed, expense:expenses!inner(paid_by)')
       .eq('user_id', userId)
       .eq('is_settled', false)
-      .neq('expense.paid_by', userId)
+      .neq('expense.paid_by' as any, userId)
 
-    const userOwesTotal = (userOwes ?? []).reduce((s, r) => s + Number(r.amount), 0)
+    const youOwe = (iOweRows ?? []).reduce((s, r) => s + Number(r.amount_owed), 0)
 
+    const totalSpent = soloSpent + youOwe
     const currentlyAvailable = totalReceived - totalSpent
 
     set({
@@ -122,9 +124,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         total_received: totalReceived,
         total_spent: totalSpent,
         currently_available: currentlyAvailable,
-        net_balance: currentlyAvailable + owedToUserTotal - userOwesTotal,
-        owed_to_you: owedToUserTotal,
-        you_owe: userOwesTotal,
+        net_balance: currentlyAvailable + owedToUser - youOwe,
+        owed_to_you: owedToUser,
+        you_owe: youOwe,
       },
       loadingWallet: false,
     })
@@ -134,18 +136,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { error } = await supabase.from('wallet_transactions').insert({
       user_id: userId,
       amount,
-      note: note || null,
+      type: 'received',
+      description: note || 'Money received',
     })
     if (error) return error.message
     await get().fetchWallet(userId)
     return null
   },
 
-  // ——————————————————————————————————————————
-  // EXPENSES
-  // ——————————————————————————————————————————
+  // ─── EXPENSES ─────────────────────────────────────────────
   fetchExpenses: async (userId) => {
     set({ loadingExpenses: true })
+
     const { data } = await supabase
       .from('expenses')
       .select(`
@@ -153,8 +155,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         payer:profiles!paid_by(*),
         splits:expense_splits(*, user:profiles(*))
       `)
-      .or(`paid_by.eq.${userId},expense_splits.user_id.eq.${userId}`)
-      .order('expense_date', { ascending: false })
+      .or(`paid_by.eq.${userId}`)
       .order('created_at', { ascending: false })
       .limit(100)
 
@@ -166,26 +167,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       .from('expenses')
       .insert({
         paid_by: userId,
-        total_amount: form.total_amount,
-        description: form.description,
+        title: form.title,
+        amount: form.amount,
         category: form.category,
-        expense_date: form.expense_date,
-        is_split: form.is_split,
-        note: form.note || null,
+        split_type: form.split_type,
+        notes: form.notes || null,
       })
       .select()
       .single()
 
     if (error) return error.message
 
-    if (form.is_split && form.splits.length > 0) {
+    if (form.split_type !== 'solo' && form.splits && form.splits.length > 0) {
       const { error: splitError } = await supabase
         .from('expense_splits')
         .insert(
-          form.splits.map((s) => ({
+          form.splits.map((s: any) => ({
             expense_id: expense.id,
             user_id: s.user_id,
-            amount: s.amount,
+            amount_owed: s.amount_owed,
           }))
         )
       if (splitError) return splitError.message
@@ -196,56 +196,53 @@ export const useAppStore = create<AppState>((set, get) => ({
     return null
   },
 
-  deleteExpense: async (expenseId) => {
+  deleteExpense: async (expenseId, userId) => {
     const { error } = await supabase.from('expenses').delete().eq('id', expenseId)
-    return error?.message ?? null
+    if (error) return error.message
+    await get().fetchExpenses(userId)
+    return null
   },
 
-  // ——————————————————————————————————————————
-  // DEBTS
-  // ——————————————————————————————————————————
+  // ─── DEBTS ────────────────────────────────────────────────
   fetchDebts: async (userId) => {
     set({ loadingDebts: true })
 
-    // What others owe user
     const { data: owedToMe } = await supabase
       .from('expense_splits')
-      .select('amount, user:profiles!user_id(*), expense:expenses!inner(paid_by)')
-      .eq('expense.paid_by', userId)
+      .select('amount_owed, user:profiles!user_id(*), expense:expenses!inner(paid_by)')
+      .eq('expense.paid_by' as any, userId)
       .eq('is_settled', false)
       .neq('user_id', userId)
 
-    // What user owes others
     const { data: iOwe } = await supabase
       .from('expense_splits')
-      .select('amount, expense:expenses!inner(paid_by, payer:profiles!paid_by(*))')
+      .select('amount_owed, expense:expenses!inner(paid_by, payer:profiles!paid_by(*))')
       .eq('user_id', userId)
       .eq('is_settled', false)
-      .neq('expense.paid_by', userId)
+      .neq('expense.paid_by' as any, userId)
 
     const debtMap = new Map<string, DebtEntry>()
 
-    // Positive = they owe me
     for (const row of (owedToMe ?? [])) {
       const person = row.user as Profile
       const existing = debtMap.get(person.id)
       if (existing) {
-        existing.amount += Number(row.amount)
+        existing.amount += Number(row.amount_owed)
         existing.unsettled_count++
       } else {
-        debtMap.set(person.id, { person, amount: Number(row.amount), unsettled_count: 1 })
+        debtMap.set(person.id, { person, amount: Number(row.amount_owed), unsettled_count: 1 })
       }
     }
 
-    // Negative = I owe them
     for (const row of (iOwe ?? [])) {
-      const payer = (row.expense as { payer: Profile }).payer
+      const payer = (row.expense as any).payer as Profile
+      if (!payer) continue
       const existing = debtMap.get(payer.id)
       if (existing) {
-        existing.amount -= Number(row.amount)
+        existing.amount -= Number(row.amount_owed)
         existing.unsettled_count++
       } else {
-        debtMap.set(payer.id, { person: payer, amount: -Number(row.amount), unsettled_count: 1 })
+        debtMap.set(payer.id, { person: payer, amount: -Number(row.amount_owed), unsettled_count: 1 })
       }
     }
 
@@ -261,32 +258,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     return error?.message ?? null
   },
 
-  // ——————————————————————————————————————————
-  // FRIENDS
-  // ——————————————————————————————————————————
+  // ─── FRIENDS ──────────────────────────────────────────────
   fetchFriends: async (userId) => {
     set({ loadingFriends: true })
-    const { data } = await supabase
-      .from('friendships')
-      .select('*, user:profiles!user_id(*), friend:profiles!friend_id(*)')
-      .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
+
+    const { data: accepted } = await supabase
+      .from('friends')
+      .select('*, requester:profiles!requester_id(*), addressee:profiles!addressee_id(*)')
+      .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
       .eq('status', 'accepted')
 
     const { data: pending } = await supabase
-      .from('friendships')
-      .select('*, user:profiles!user_id(*), friend:profiles!friend_id(*)')
-      .eq('friend_id', userId)
+      .from('friends')
+      .select('*, requester:profiles!requester_id(*)')
+      .eq('addressee_id', userId)
       .eq('status', 'pending')
 
-    const friends = (data ?? []).map((f) =>
-      f.user_id === userId ? (f.friend as Profile) : (f.user as Profile)
+    const friends = (accepted ?? []).map((f) =>
+      f.requester_id === userId
+        ? (f.addressee as Profile)
+        : (f.requester as Profile)
     )
 
-    set({
-      friends,
-      pendingRequests: pending ?? [],
-      loadingFriends: false,
-    })
+    set({ friends, pendingRequests: pending ?? [], loadingFriends: false })
   },
 
   searchUsers: async (query) => {
@@ -300,14 +294,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   sendFriendRequest: async (userId, friendId) => {
     const { error } = await supabase
-      .from('friendships')
-      .insert({ user_id: userId, friend_id: friendId })
+      .from('friends')
+      .insert({ requester_id: userId, addressee_id: friendId })
     return error?.message ?? null
   },
 
   acceptFriendRequest: async (friendshipId) => {
     const { error } = await supabase
-      .from('friendships')
+      .from('friends')
       .update({ status: 'accepted' })
       .eq('id', friendshipId)
     return error?.message ?? null

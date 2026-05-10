@@ -1,58 +1,56 @@
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
-import { useAuthStore } from '@/store/authStore'
-import { Sidebar, BottomNav } from '@/components/layout/Sidebar'
-import { AuthPage } from '@/pages/AuthPage'
-import { DashboardPage } from '@/pages/DashboardPage'
-import { WalletPage } from '@/pages/WalletPage'
-import { ExpensesPage } from '@/pages/ExpensesPage'
-import { DebtsPage } from '@/pages/DebtsPage'
-import { FriendsPage } from '@/pages/FriendsPage'
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuthStore } from "@/store/authStore";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { AuthPage } from "@/components/auth/AuthPage";
+import { DashboardPage } from "@/components/dashboard/DashboardPage";
+import { WalletPage } from "@/components/wallet/WalletPage";
+import { ExpensesPage } from "@/components/expenses/ExpensesPage";
+import { DebtsPage } from "@/components/debts/DebtsPage";
+import { FriendsPage } from "@/components/friends/FriendsPage";
 
-// Protected layout wrapper
-const AppLayout = () => {
-  const { user } = useAuthStore()
-  if (!user) return <Navigate to="/auth" replace />
-  return (
-    <div className="flex min-h-screen bg-ink-50">
-      <div className="hidden md:flex">
-        <Sidebar />
+function App() {
+  const { user, loading, initialize } = useAuthStore();
+
+  useEffect(() => {
+    initialize();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-950">
+        <div className="text-white text-lg">Loading...</div>
       </div>
-      <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
-        <Outlet />
-      </main>
-      <BottomNav />
-    </div>
-  )
-}
+    );
+  }
 
-// Loading screen
-const Spinner = () => (
-  <div className="min-h-screen bg-ink-50 flex items-center justify-center">
-    <div className="w-8 h-8 border-2 border-ink-200 border-t-ink-900 rounded-full animate-spin" />
-  </div>
-)
-
-export default function App() {
-  const { initialize, initialized } = useAuthStore()
-
-  useEffect(() => { initialize() }, [])
-
-  if (!initialized) return <Spinner />
+  if (!user) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="*" element={<AuthPage />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/auth" element={<AuthPage />} />
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/wallet" element={<WalletPage />} />
-          <Route path="/expenses" element={<ExpensesPage />} />
-          <Route path="/debts" element={<DebtsPage />} />
-          <Route path="/friends" element={<FriendsPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <div className="flex min-h-screen bg-gray-950">
+        <Sidebar />
+        <main className="flex-1 overflow-auto">
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/wallet" element={<WalletPage />} />
+            <Route path="/expenses" element={<ExpensesPage />} />
+            <Route path="/debts" element={<DebtsPage />} />
+            <Route path="/friends" element={<FriendsPage />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </main>
+      </div>
     </BrowserRouter>
-  )
+  );
 }
+
+export default App;

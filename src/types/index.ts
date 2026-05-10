@@ -1,6 +1,4 @@
-// ============================================================
-// Core domain types matching Supabase schema
-// ============================================================
+// Core domain types — matches Supabase schema exactly
 
 export interface Profile {
   id: string
@@ -14,8 +12,8 @@ export interface WalletTransaction {
   id: string
   user_id: string
   amount: number
-  note: string | null
-  transaction_date: string
+  type: 'received' | 'spent'
+  description: string
   created_at: string
 }
 
@@ -26,18 +24,16 @@ export type ExpenseCategory =
   | 'medicine'
   | 'utilities'
   | 'entertainment'
-  | 'study'
   | 'other'
 
 export interface Expense {
   id: string
   paid_by: string
-  total_amount: number
-  description: string
+  title: string
+  amount: number
   category: ExpenseCategory
-  expense_date: string
-  is_split: boolean
-  note: string | null
+  split_type: 'solo' | 'equal' | 'custom'
+  notes: string | null
   created_at: string
   // Joined fields
   payer?: Profile
@@ -48,7 +44,7 @@ export interface ExpenseSplit {
   id: string
   expense_id: string
   user_id: string
-  amount: number
+  amount_owed: number
   is_settled: boolean
   settled_at: string | null
   created_at: string
@@ -57,22 +53,16 @@ export interface ExpenseSplit {
   expense?: Expense
 }
 
-export type FriendshipStatus = 'pending' | 'accepted'
-
 export interface Friendship {
   id: string
-  user_id: string
-  friend_id: string
-  status: FriendshipStatus
+  requester_id: string
+  addressee_id: string
+  status: 'pending' | 'accepted' | 'declined'
   created_at: string
   // Joined fields
-  user?: Profile
-  friend?: Profile
+  requester?: Profile
+  addressee?: Profile
 }
-
-// ============================================================
-// UI / computed types
-// ============================================================
 
 export interface DebtEntry {
   person: Profile
@@ -81,30 +71,21 @@ export interface DebtEntry {
 }
 
 export interface WalletSummary {
-  total_received: number   // all money ever added to wallet
-  total_spent: number      // all solo + your share of split expenses
-  currently_available: number  // total_received - total_spent
-  net_balance: number          // currently_available + owed_to_you - you_owe
+  total_received: number
+  total_spent: number
+  currently_available: number
+  net_balance: number
   owed_to_you: number
   you_owe: number
 }
 
-export interface SpendByCategory {
-  category: ExpenseCategory
-  amount: number
-}
-
-export type SplitMode = 'equal' | 'manual'
-
 export interface NewExpenseForm {
-  description: string
-  total_amount: number
+  title: string
+  amount: number
   category: ExpenseCategory
-  expense_date: string
-  note: string
-  is_split: boolean
-  split_mode: SplitMode
-  splits: { user_id: string; amount: number }[]
+  notes: string
+  split_type: 'solo' | 'equal' | 'custom'
+  splits: { user_id: string; amount_owed: number }[]
 }
 
 export const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
@@ -114,7 +95,6 @@ export const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   medicine: 'Medicine',
   utilities: 'Utilities',
   entertainment: 'Entertainment',
-  study: 'Study',
   other: 'Other',
 }
 
@@ -125,6 +105,15 @@ export const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   medicine: '#EF4444',
   utilities: '#8B5CF6',
   entertainment: '#EC4899',
-  study: '#06B6D4',
   other: '#6B7280',
+}
+
+export const CATEGORY_ICONS: Record<ExpenseCategory, string> = {
+  food: '🍔',
+  groceries: '🛒',
+  transport: '🚕',
+  medicine: '💊',
+  utilities: '💡',
+  entertainment: '🎮',
+  other: '💳',
 }

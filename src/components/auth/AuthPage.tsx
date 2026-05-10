@@ -115,7 +115,7 @@ export const AuthPage = () => {
         <p className="text-center text-xs text-ink-400 mt-4">
           Track your money. Split fairly. Settle easily.
         </p>
-      </div>
+      </div> 
     </div>
   )
 }

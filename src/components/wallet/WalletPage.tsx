@@ -45,10 +45,8 @@ export const WalletPage = () => {
         </Button>
       </div>
 
-      {/* Summary breakdown */}
       {walletSummary && (
         <div className="grid grid-cols-1 gap-3 mb-6">
-          {/* Big balance card */}
           <Card className="bg-ink-900 border-ink-900">
             <div className="flex items-start justify-between mb-6">
               <div>
@@ -84,15 +82,10 @@ export const WalletPage = () => {
                 <TrendingUp size={14} className="text-info" />
                 <p className="text-xs text-ink-400 font-medium">Net</p>
               </div>
-              <Amount
-                value={walletSummary.net_balance}
-                size="md"
-                colored
-              />
+              <Amount value={walletSummary.net_balance} size="md" colored />
             </Card>
           </div>
 
-          {/* Breakdown bar */}
           {walletSummary.total_received > 0 && (
             <Card>
               <p className="text-sm font-medium text-ink-800 mb-3">Balance Breakdown</p>
@@ -108,16 +101,13 @@ export const WalletPage = () => {
               </div>
               <div className="flex gap-4 mt-2">
                 <div className="flex items-center gap-1.5 text-xs text-ink-500">
-                  <span className="w-2 h-2 rounded-full bg-danger" />
-                  Spent
+                  <span className="w-2 h-2 rounded-full bg-danger" /> Spent
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-ink-500">
-                  <span className="w-2 h-2 rounded-full bg-warn" />
-                  Owed
+                  <span className="w-2 h-2 rounded-full bg-warn" /> Owed
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-ink-500">
-                  <span className="w-2 h-2 rounded-full bg-ink-100" />
-                  Available
+                  <span className="w-2 h-2 rounded-full bg-ink-100" /> Available
                 </div>
               </div>
             </Card>
@@ -125,7 +115,6 @@ export const WalletPage = () => {
         </div>
       )}
 
-      {/* Transaction history */}
       <Card>
         <div className="flex items-center gap-2 mb-4">
           <Clock size={16} className="text-ink-400" />
@@ -147,10 +136,10 @@ export const WalletPage = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-ink-900">
-                    {txn.note || 'Money received'}
+                    {txn.description || 'Money received'}
                   </p>
                   <p className="text-xs text-ink-400">
-                    {format(new Date(txn.transaction_date), 'd MMM yyyy')}
+                    {format(new Date(txn.created_at), 'd MMM yyyy')}
                   </p>
                 </div>
                 <Amount value={txn.amount} size="sm" colored />
@@ -160,8 +149,7 @@ export const WalletPage = () => {
         )}
       </Card>
 
-      {/* Add Funds Modal */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Funds">
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setError('') }} title="Add Funds">
         <div className="flex flex-col gap-4">
           <Input
             label="Amount (Rs)"
